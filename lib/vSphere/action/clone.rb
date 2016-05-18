@@ -104,21 +104,21 @@ module VagrantPlugins
         private
 
         def resize_disk(machine, size)
-                # get current vm disk
-                virtual_disk = machine.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)[0]
-                virtual_disk.capacityInKB = size * 1024 * 1024;
+          # get current vm disk
+          virtual_disk = machine.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)[0]
+          virtual_disk.capacityInKB = size * 1024 * 1024
 
-                # execute reconfigure task
-                new_vm_spec = RbVmomi::VIM.VirtualMachineConfigSpec(
-                  :deviceChange => [RbVmomi::VIM.VirtualDeviceConfigSpec(
-                    :device => virtual_disk,
-                    :operation => RbVmomi::VIM.VirtualDeviceConfigSpecOperation(:edit)
-                  )]
-                )
-                task = machine.ReconfigVM_Task(:spec => new_vm_spec)
-                task.wait_for_completion
-                { 'task_state' => task.info.state }
-              end
+          # execute reconfigure task
+          new_vm_spec = RbVmomi::VIM.VirtualMachineConfigSpec(
+            :deviceChange => [RbVmomi::VIM.VirtualDeviceConfigSpec(
+              :device => virtual_disk,
+              :operation => RbVmomi::VIM.VirtualDeviceConfigSpecOperation(:edit)
+            )]
+          )
+          task = machine.ReconfigVM_Task(:spec => new_vm_spec)
+          task.wait_for_completion
+          { 'task_state' => task.info.state }
+        end
 
         def get_customization_spec(machine, spec_info)
           customization_spec = spec_info.spec.clone
