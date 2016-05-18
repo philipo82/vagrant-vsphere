@@ -22,6 +22,7 @@ module VagrantPlugins
           fail Errors::VSphereError, :'missing_template' if template.nil?
           vm_base_folder = get_vm_base_folder dc, template, config
           fail Errors::VSphereError, :'invalid_base_path' if vm_base_folder.nil?
+          disk_size_in_gb = config.disk_size.to_i
 
           begin
             # Storage DRS does not support vSphere linked clones. http://www.vmware.com/files/pdf/techpaper/vsphere-storage-drs-interoperability.pdf
@@ -29,7 +30,7 @@ module VagrantPlugins
             fail Errors::VSphereError, :'invalid_configuration_linked_clone_with_sdrs' if config.linked_clone && ds.is_a?(RbVmomi::VIM::StoragePod)
 
             location = get_location ds, dc, machine, template
-            spec = RbVmomi::VIM.VirtualMachineCloneSpec location: location, powerOn: true, template: false
+            spec = RbVmomi::VIM.VirtualMachineCloneSpec location: location, powerOn: false, template: false
             spec[:config] = RbVmomi::VIM.VirtualMachineConfigSpec
             customization_info = get_customization_spec_info_by_name connection, machine
 
@@ -75,8 +76,11 @@ module VagrantPlugins
               env[:ui].info I18n.t('vsphere.creating_cloned_vm')
               env[:ui].info " -- #{config.clone_from_vm ? 'Source' : 'Template'} VM: #{template.pretty_path}"
               env[:ui].info " -- Target VM: #{vm_base_folder.pretty_path}/#{name}"
+              env[:ui].info " -- Disk size: #{disk_size_in_gb}" if disk_size_in_gb > 0
 
               new_vm = template.CloneVM_Task(folder: vm_base_folder, name: name, spec: spec).wait_for_completion
+              resize_disk(new_vm, disk_size_in_gb) if disk_size_in_gb > 0
+              new_vm.PowerOnVM_Task.wait_for_completion
 
               config.custom_attributes.each do |k, v|
                 new_vm.setCustomValue(key: k, value: v)
@@ -98,6 +102,23 @@ module VagrantPlugins
         end
 
         private
+
+        def resize_disk(machine, size)
+                # get current vm disk
+                virtual_disk = machine.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)[0]
+                virtual_disk.capacityInKB = size * 1024 * 1024;
+
+                # execute reconfigure task
+                new_vm_spec = RbVmomi::VIM.VirtualMachineConfigSpec(
+                  :deviceChange => [RbVmomi::VIM.VirtualDeviceConfigSpec(
+                    :device => virtual_disk,
+                    :operation => RbVmomi::VIM.VirtualDeviceConfigSpecOperation(:edit)
+                  )]
+                )
+                task = machine.ReconfigVM_Task(:spec => new_vm_spec)
+                task.wait_for_completion
+                { 'task_state' => task.info.state }
+              end
 
         def get_customization_spec(machine, spec_info)
           customization_spec = spec_info.spec.clone
