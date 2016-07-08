@@ -41,6 +41,7 @@ module VagrantPlugins
 
             spec[:customization] = get_customization_spec(machine, customization_info) unless customization_info.nil?
             add_custom_address_type(template, spec, config.addressType) unless config.addressType.nil?
+            add_custom_disk_size(template, spec, config.disk_size) unless config.disk_size.nil?
             add_custom_mac(template, spec, config.mac) unless config.mac.nil?
             add_custom_vlan(template, dc, spec, config.vlan) unless config.vlan.nil?
             add_custom_memory(spec, config.memory_mb) unless config.memory_mb.nil?
@@ -113,7 +114,7 @@ module VagrantPlugins
           virtual_disk = machine.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)[0] || fail
           new_size_in_kb = size * 1024 * 1024
           fail Errors::VSphereError, :'ERROR disk_size specified smaller than template. Shrinking disk can be harmful and is not fully supported' if new_size_in_kb < virtual_disk.capacityInKB
-          virtual_disk.capacityInKB = new_sizeinKB
+          virtual_disk.capacityInKB = new_size_in_kb
           # fail Errors::VSphereError, :'ERROR disk_size specified smaller than template. Shrinking disk can be harmful and is not fully supported' if size < virtual_disk
           # execute reconfigure task
           new_vm_spec = RbVmomi::VIM.VirtualMachineConfigSpec(
@@ -226,6 +227,10 @@ module VagrantPlugins
           card.addressType = addressType
           card_spec = { :deviceChange => [{ :operation => :edit, :device => card }] }
           template.ReconfigVM_Task(:spec => card_spec).wait_for_completion
+        end
+        
+        def add_custom_disk_size(template, spec, disk_size)
+	  spec[:config][:diskSizeGB] = Integer(disk_size)        
         end
 
         def add_custom_mac(template, spec, mac)
