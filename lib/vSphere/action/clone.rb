@@ -22,13 +22,11 @@ module VagrantPlugins
           fail Errors::VSphereError, :'missing_template' if template.nil?
           vm_base_folder = get_vm_base_folder dc, template, config
           fail Errors::VSphereError, :'invalid_base_path' if vm_base_folder.nil?
-          disk_size_in_gb = config.disk_size.to_i
-          fail Errors::VSphereError, :'Error grabbing disk_size' if disk_size_in_gb.nil?
-          fail Errors::VSphereError, :'ERROR disk_size greater than 1TB' if disk_size_in_gb > 1024
+          disk_size_in_mb = config.disk_size.to_i
+          fail Errors::VSphereError, :'Error grabbing disk_size' if disk_size_in_mb.nil?
+          fail Errors::VSphereError, :'ERROR disk_size greater than 1TB' if disk_size_in_mb > 1048576
           begin
             template_disk = template.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk).first
-
-            puts template_disk.capacityInKB unless template_disk.nil?
 
             # Storage DRS does not support vSphere linked clones. http://www.vmware.com/files/pdf/techpaper/vsphere-storage-drs-interoperability.pdf
             ds = get_datastore dc, machine
@@ -82,10 +80,10 @@ module VagrantPlugins
               env[:ui].info I18n.t('vsphere.creating_cloned_vm')
               env[:ui].info " -- #{config.clone_from_vm ? 'Source' : 'Template'} VM: #{template.pretty_path}"
               env[:ui].info " -- Target VM: #{vm_base_folder.pretty_path}/#{name}"
-              env[:ui].info " -- Custom Disk size: #{disk_size_in_gb} GB" if disk_size_in_gb > 0
+              env[:ui].info " -- Custom Disk size: #{disk_size_in_mb} MB" if disk_size_in_mb > 0
 
               new_vm = template.CloneVM_Task(folder: vm_base_folder, name: name, spec: spec).wait_for_completion
-              resize_disk(new_vm, disk_size_in_gb) if disk_size_in_gb > 0
+              resize_disk(new_vm, disk_size_in_mb) if disk_size_in_mb > 0
               new_vm.PowerOnVM_Task.wait_for_completion
 
               config.custom_attributes.each do |k, v|
@@ -109,10 +107,10 @@ module VagrantPlugins
 
         private
 
-        def resize_disk(machine, size)
+        def resize_disk(machine, sizeInMB)
           # get current vm disk
           virtual_disk = machine.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)[0] || fail
-          new_size_in_kb = size * 1024 * 1024
+          new_size_in_kb = sizeInMB * 1024
           fail Errors::VSphereError, :'ERROR disk_size specified smaller than template. Shrinking disk can be harmful and is not fully supported' if new_size_in_kb < virtual_disk.capacityInKB
           virtual_disk.capacityInKB = new_size_in_kb
           # fail Errors::VSphereError, :'ERROR disk_size specified smaller than template. Shrinking disk can be harmful and is not fully supported' if size < virtual_disk
