@@ -44,6 +44,7 @@ module VagrantPlugins
                 next
               end
 
+	#      b3.use ProvisionVSphere
               b3.use Provision
               b3.use SyncedFolders
             end
@@ -191,6 +192,7 @@ module VagrantPlugins
       autoload :MessageNotRunning, action_root.join('message_not_running')
       autoload :PowerOff, action_root.join('power_off')
       autoload :PowerOn, action_root.join('power_on')
+      # autoload :ProvisionVSphere, action_root.join('provision_vsphere')
     end
   end
 end
