@@ -46,9 +46,13 @@ module VagrantPlugins
 
               b3.use Provision
               b3.use SyncedFolders
-              b3.use ProvisionVSphere
             end
+            
+            
           end
+          b.use ConnectVSphere 
+          b.use AddVMDK
+          b.use CloseVSphere
         end
       end
 
@@ -192,7 +196,7 @@ module VagrantPlugins
       autoload :MessageNotRunning, action_root.join('message_not_running')
       autoload :PowerOff, action_root.join('power_off')
       autoload :PowerOn, action_root.join('power_on')
-      autoload :ProvisionVSphere, action_root.join('provision_vsphere')
+      autoload :AddVMDK, action_root.join('add_vmdk')
     end
   end
 end

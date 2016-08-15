@@ -30,6 +30,7 @@ module VagrantPlugins
 
             # Storage DRS does not support vSphere linked clones. http://www.vmware.com/files/pdf/techpaper/vsphere-storage-drs-interoperability.pdf
             ds = get_datastore dc, machine
+            
             fail Errors::VSphereError, :'invalid_configuration_linked_clone_with_sdrs' if config.linked_clone && ds.is_a?(RbVmomi::VIM::StoragePod)
 
             location = get_location ds, dc, machine, template
@@ -83,7 +84,7 @@ module VagrantPlugins
               env[:ui].info " -- Custom Disk size: #{disk_size_in_mb} MB" if disk_size_in_mb > 0
 
               new_vm = template.CloneVM_Task(folder: vm_base_folder, name: name, spec: spec).wait_for_completion
-              resize_disk(new_vm, disk_size_in_mb) if disk_size_in_mb > 0
+              resize_disk(new_vm, disk_size_in_mb, env) if disk_size_in_mb > 0
               new_vm.PowerOnVM_Task.wait_for_completion
 
               config.custom_attributes.each do |k, v|
@@ -107,9 +108,16 @@ module VagrantPlugins
 
         private
 
-        def resize_disk(machine, sizeInMB)
+        def resize_disk(machine, sizeInMB, env)
           # get current vm disk
           virtual_disk = machine.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)[0] || fail
+          
+          env[:ui].info virtual_disk.backing.fileName
+          env[:ui].info virtual_disk.backing.datastore.info.name
+          env[:ui].info virtual_disk.backing.datastore.info.url
+          
+#          x.y = z
+          
           new_size_in_kb = sizeInMB * 1024
           fail Errors::VSphereError, :'ERROR disk_size specified smaller than template. Shrinking disk can be harmful and is not fully supported' if new_size_in_kb < virtual_disk.capacityInKB
           virtual_disk.capacityInKB = new_size_in_kb
@@ -228,7 +236,7 @@ module VagrantPlugins
         end
         
         def add_custom_disk_size(template, spec, disk_size)
-	  spec[:config][:diskSizeGB] = Integer(disk_size)        
+          spec[:config][:diskSizeGB] = Integer(disk_size)        
         end
 
         def add_custom_mac(template, spec, mac)
