@@ -111,13 +111,6 @@ module VagrantPlugins
         def resize_disk(machine, sizeInMB, env)
           # get current vm disk
           virtual_disk = machine.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)[0] || fail
-          
-          env[:ui].info virtual_disk.backing.fileName
-          env[:ui].info virtual_disk.backing.datastore.info.name
-          env[:ui].info virtual_disk.backing.datastore.info.url
-          
-#          x.y = z
-          
           new_size_in_kb = sizeInMB * 1024
           fail Errors::VSphereError, :'ERROR disk_size specified smaller than template. Shrinking disk can be harmful and is not fully supported' if new_size_in_kb < virtual_disk.capacityInKB
           virtual_disk.capacityInKB = new_size_in_kb
