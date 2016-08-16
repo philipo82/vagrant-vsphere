@@ -24,9 +24,15 @@ module VagrantPlugins
           disks.each do |disk|
             create = disk['create']
             type = disk['type']
+            path = disk['path']
 
             if create.nil?
               puts "Missing required attribute 'create' for disk: #{disk}"
+              exit(-1)
+            end
+
+            if path.nil?
+              puts "Missing required attribute 'path' for disk: #{disk}"
               exit(-1)
             end
 
@@ -41,27 +47,16 @@ module VagrantPlugins
               puts "'create' attribute was provided, but 'size' attribute missing for #{disk}"
               exit(-1)
             end
-
-            path = disk['path']
-
-            if create == false && path.nil?
-              puts "'create' attribute was not provided and 'path' attribute missing for #{disk}"
-              exit(-2)
-            end
           end
         end
 
         def find_virtual_disk_in_datastore(datastore, path)
 
-          if path.nil?
-            return nil
-          end
-
           split_path = path.split(/\//)
 
           if split_path.empty? || split_path.length < 2
-            puts "Incorrect path format. Expected format: <path_to_folder>/vmdk_name"
-            exit(-4)
+            puts "Incorrect path format. Expected format: path/to/folder/vmdk_name"
+            exit(-1)
           end
 
           vmdk_file_name = split_path[split_path.length - 1]
@@ -113,13 +108,10 @@ module VagrantPlugins
             return nil
           end
 
-          puts "Returning existing disk"
           return files[0]
         end
 
         def is_disk_attached (datastore, vmdk_path)
-          puts "Checking if disk attached"
-
           pc = datastore._connection.serviceContent.propertyCollector
           vms = datastore.vm
           vm_files = pc.collectMultiple vms, 'layoutEx.file'
@@ -131,30 +123,14 @@ module VagrantPlugins
             end
           end
 
+          puts "Disk not attached"
           return false
-        end
-
-        def get_next_available_number (datastore, vmname)
-          # now we need to inspect the files in this datastore to get our next file name
-          next_vmdk = 1
-          pc = datastore._connection.serviceContent.propertyCollector
-          vms = datastore.vm
-
-          vm_files = pc.collectMultiple vms, 'layoutEx.file'
-          vm_files.keys.each do |vmFile|
-            vm_files[vmFile]['layoutEx.file'].each do |layout|
-              if layout.name.match(/^\[#{datastore.name}\] #{vmname}\/#{vmname}_([0-9]+).vmdk/)
-                num = Regexp.last_match(1)
-                next_vmdk = num.to_i + 1 if next_vmdk <= num.to_i
-              end
-            end
-          end
-
-          next_vmdk
         end
 
         def create_new_disk_in_datastore(datastore, vdm, path, vmdk_size_kb, vmdk_type, datacenter)
 
+          # TODO - thick, preallocated?
+          vmdk_type = 'preallocated' if vmdk_type == 'thick'
           vmdk_full_name = "[#{datastore.name}] #{path}"
 
           # create the disk
@@ -171,8 +147,6 @@ module VagrantPlugins
                 spec: vmdk_spec
             ).wait_for_completion
           end
-
-          return vmdk_full_name
         end
 
         def find_scsi_controller_and_unit_number (vm)
@@ -275,14 +249,16 @@ module VagrantPlugins
         def attach_virtual_disk_to_vm (vm, datastore, vmdk_full_name, vmdk_path, vmdk_size_kb)
           disk_attched_to_vm = is_disk_attached datastore, vmdk_path
 
+          puts "Trying to attach: #{vmdk_full_name}"
+
           if disk_attched_to_vm == true
-            puts "Trying to attach disk '#{vmdk_full_name}' but it is already attached to this VM. Exiting..."
-            exit(-2)
+            puts "Trying to attach disk '#{vmdk_full_name}' but it is already attached to a VM. Exiting..."
+            exit(-1)
           end
 
           newDiskControllerInfo = find_scsi_controller_and_unit_number vm
 
-          puts "info: #{newDiskControllerInfo}"
+          puts "Controller info: #{newDiskControllerInfo}"
 
           vmdk_backing = RbVmomi::VIM::VirtualDiskFlatVer2BackingInfo(
               datastore: datastore,
@@ -298,16 +274,45 @@ module VagrantPlugins
               unitNumber: newDiskControllerInfo["unit_number"]
           )
 
+          puts "device: #{device}"
+
           device_config_spec = RbVmomi::VIM::VirtualDeviceConfigSpec(
               device: device,
               operation: RbVmomi::VIM::VirtualDeviceConfigSpecOperation('add')
           )
+
+          puts "device_config_spec: #{device_config_spec}"
 
           vm_config_spec = RbVmomi::VIM::VirtualMachineConfigSpec(
               deviceChange: [device_config_spec]
           )
 
           vm.ReconfigVM_Task(spec: vm_config_spec).wait_for_completion
+        end
+
+        def verify_vmdir_exists (datastore, datacenter, path)
+
+          split_path = path.split(/\//)
+
+          if split_path.empty? || split_path.length < 2
+            puts "Incorrect path format. Expected format: path/to/folder/vmdk_name"
+            exit(-1)
+          end
+
+          split_path.delete_at(split_path.length - 1)
+          vmdk_folder = split_path.join("/")
+
+          unless datastore.exists? vmdk_folder
+            dc = datacenter
+            vmdk_dir = "[#{datastore.name}] #{vmdk_folder}"
+            begin
+              dc._connection.serviceContent.fileManager.MakeDirectory name: vmdk_dir, datacenter: dc, createParentDirectories: true
+            rescue RbVmomi::Fault => e
+              puts "Error when creating directory #{vmdk_dir}."
+
+              exit (-1)
+            end
+          end
         end
 
         def call(env)
@@ -325,57 +330,45 @@ module VagrantPlugins
           return if vm.nil?
 
           datacenter = get_datacenter vim, machine
+          vmdk_datastore = get_datastore datacenter, machine
 
           disks.each do |disk|
             create_disk = disk['create']
-            data_store_name = disk['data_store_name']
+            path = disk['path']
 
-            if data_store_name.nil?
-              vmdk_datastore = get_datastore datacenter, machine
-            else
-              vmdk_datastore = get_datastore_by_name datacenter, data_store_name
-            end
+            verify_vmdir_exists vmdk_datastore, datacenter, path
 
             puts "Choosing: #{vmdk_datastore.name}"
 
+            virtualDisk = find_virtual_disk_in_datastore vmdk_datastore, path
+            vmdk_full_name = "[#{vmdk_datastore.name}] #{path}"
+
             if create_disk == true
-              path = disk['path']
               size = disk['size']
               vmdk_type = disk['type']
-
-              virtualDisk = find_virtual_disk_in_datastore vmdk_datastore, path
+              vmdk_size_kb = size.to_i * 1024
 
               if !virtualDisk.nil?
-                puts "Trying to create a disk #{path}, but it already exists in datatore: #{vmdk_datastore.name}. Exiting..."
-                exit (-6)
+                puts "Virtual disk #{path} already created - using this one."
+              else
+                create_new_disk_in_datastore vmdk_datastore, vim.serviceContent.virtualDiskManager, path, vmdk_size_kb, vmdk_type, datacenter
               end
-
-              vmname = vm.summary.config.name
-              next_vmdk = get_next_available_number vmdk_datastore, vmname
-
-              if path.nil?
-                path = "#{vmname}/#{vmname}_#{next_vmdk}.vmdk"
-              end
-
-              vmdk_size_kb = size.to_i * 1024
-              # TODO - thick, preallocated?
-              vmdk_type = 'preallocated' if vmdk_type == 'thick'
-              vmdk_full_name = create_new_disk_in_datastore vmdk_datastore, vim.serviceContent.virtualDiskManager, path, vmdk_size_kb, vmdk_type, datacenter
             else
-              path = disk['path']
-
-              virtualDisk = find_virtual_disk_in_datastore vmdk_datastore, path
-
               if virtualDisk.nil?
                 puts "Couldn't find virtual disk specified at #{path} in datastore [#{vmdk_datastore.name}]. Exiting..."
-                exit (-3)
+                exit (-1)
               end
 
-              vmdk_full_name = "[#{vmdk_datastore.name}] #{path}"
               vmdk_size_kb = virtualDisk.capacityKb
             end
 
-            attach_virtual_disk_to_vm vm, vmdk_datastore, vmdk_full_name, path, vmdk_size_kb
+            begin
+              attach_virtual_disk_to_vm vm, vmdk_datastore, vmdk_full_name, path, vmdk_size_kb
+            rescue RbVmomi::Fault => e
+              puts "Error when attaching disk #{path}: #{e}."
+
+              exit (-1)
+            end
           end
         end
       end
