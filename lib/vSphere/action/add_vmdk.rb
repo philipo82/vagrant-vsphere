@@ -19,8 +19,6 @@ module VagrantPlugins
         end
 
         def validate_config(disks)
-          puts "disks: #{disks}"
-
           disks.each do |disk|
             create = disk['create']
             type = disk['type']
@@ -108,9 +106,17 @@ module VagrantPlugins
             return nil
           end
 
+          if files.length > 1
+            puts "Found more than 1 virtual disks with a given path #{path}. This should not have happened. Exiting..."
+            exit (-1)
+          end
+
+          # There should be only 1 file matching the search criteria
           return files[0]
         end
 
+        # Checks whether the virtual disk specified by the datastore and path
+        # is already attached to any VM
         def is_disk_attached (datastore, vmdk_path)
           pc = datastore._connection.serviceContent.propertyCollector
           vms = datastore.vm
@@ -123,10 +129,10 @@ module VagrantPlugins
             end
           end
 
-          puts "Disk not attached"
           return false
         end
 
+        # Creates new virtual disk in the datastore
         def create_new_disk_in_datastore(datastore, vdm, path, vmdk_size_kb, vmdk_type, datacenter)
 
           # TODO - thick, preallocated?
@@ -149,10 +155,7 @@ module VagrantPlugins
           end
         end
 
-        def find_scsi_controller_and_unit_number (vm)
-          # now we run through the SCSI controllers to see if there's an available one
-          available_controllers = []
-          use_controller = nil
+        def find_scsi_controller_tree (vm)
           scsi_tree = {}
 
           vm.config.hardware.device.each do |device|
@@ -171,6 +174,16 @@ module VagrantPlugins
             scsi_tree[device.controllerKey]['children'].push(device)
           end
 
+          return scsi_tree
+        end
+
+        # Finds available SCSI controller. If it doesn't find any controllers
+        # it creates one first.
+        def find_scsi_controller (vm, scsi_tree)
+          # now we run through the SCSI controllers to see if there's an available one
+          available_controllers = []
+          use_controller = nil
+
           scsi_tree.keys.sort.each do |controller|
             if scsi_tree[controller]['children'].length < 15 # Virtual SCSI targets per virtual SCSI adapters
               available_controllers.push(scsi_tree[controller]['device'].deviceInfo.label)
@@ -179,9 +192,7 @@ module VagrantPlugins
 
           if available_controllers.length > 0
             use_controller = available_controllers[0]
-            puts "using #{use_controller}"
           else
-
             if scsi_tree.keys.length < 4 # Virtual SCSI adapters per virtual machine
 
               # Add a controller if none are available
@@ -218,8 +229,10 @@ module VagrantPlugins
             end
           end
 
-          ctrl = find_device(vm, use_controller)
+          return find_device(vm, use_controller)
+        end
 
+        def find_new_unit_number (scsi_tree, ctrl)
           used_unit_numbers = []
           scsi_tree.keys.sort.each do |c|
             next unless ctrl.key == scsi_tree[c]['device'].key
@@ -237,16 +250,10 @@ module VagrantPlugins
             end
           end
 
-          # ensure we don't try to add the controllers SCSI ID
-          new_unit_number = available_unit_numbers.sort[0]
-
-          return {
-              "controller" => ctrl,
-              "unit_number" => new_unit_number
-          }
+          return available_unit_numbers.sort[0]
         end
 
-        def attach_virtual_disk_to_vm (vm, datastore, vmdk_full_name, vmdk_path, vmdk_size_kb)
+        def attach_virtual_disk_to_vm (vm, datastore, vmdk_full_name, vmdk_path, vmdk_size_kb, ctrl_key, unit_number)
           disk_attched_to_vm = is_disk_attached datastore, vmdk_path
 
           puts "Trying to attach: #{vmdk_full_name}"
@@ -255,10 +262,6 @@ module VagrantPlugins
             puts "Trying to attach disk '#{vmdk_full_name}' but it is already attached to a VM. Exiting..."
             exit(-1)
           end
-
-          newDiskControllerInfo = find_scsi_controller_and_unit_number vm
-
-          puts "Controller info: #{newDiskControllerInfo}"
 
           vmdk_backing = RbVmomi::VIM::VirtualDiskFlatVer2BackingInfo(
               datastore: datastore,
@@ -269,19 +272,15 @@ module VagrantPlugins
           device = RbVmomi::VIM::VirtualDisk(
               backing: vmdk_backing,
               capacityInKB: vmdk_size_kb,
-              controllerKey: newDiskControllerInfo["controller"].key,
+              controllerKey: ctrl_key,
               key: -1,
-              unitNumber: newDiskControllerInfo["unit_number"]
+              unitNumber: unit_number
           )
-
-          puts "device: #{device}"
 
           device_config_spec = RbVmomi::VIM::VirtualDeviceConfigSpec(
               device: device,
               operation: RbVmomi::VIM::VirtualDeviceConfigSpecOperation('add')
           )
-
-          puts "device_config_spec: #{device_config_spec}"
 
           vm_config_spec = RbVmomi::VIM::VirtualMachineConfigSpec(
               deviceChange: [device_config_spec]
@@ -362,8 +361,12 @@ module VagrantPlugins
               vmdk_size_kb = virtualDisk.capacityKb
             end
 
+            scsi_tree = find_scsi_controller_tree vm
+            ctrl = find_scsi_controller vm, scsi_tree
+            new_unit_number = find_new_unit_number scsi_tree, ctrl
+
             begin
-              attach_virtual_disk_to_vm vm, vmdk_datastore, vmdk_full_name, path, vmdk_size_kb
+              attach_virtual_disk_to_vm vm, vmdk_datastore, vmdk_full_name, path, vmdk_size_kb, ctrl, new_unit_number
             rescue RbVmomi::Fault => e
               puts "Error when attaching disk #{path}: #{e}."
 
