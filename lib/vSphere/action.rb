@@ -47,10 +47,9 @@ module VagrantPlugins
               b3.use Provision
               b3.use SyncedFolders
             end
-            
-            
           end
-          b.use ConnectVSphere 
+
+          b.use ConnectVSphere
           b.use AddVMDK
           b.use CloseVSphere
         end
@@ -119,6 +118,10 @@ module VagrantPlugins
           b.use Provision
           b.use SyncedFolders
           b.use SetHostname
+
+          b.use ConnectVSphere
+          b.use AddVMDK
+          b.use CloseVSphere
         end
       end
 
