@@ -268,8 +268,8 @@ module VagrantPlugins
           puts "Trying to attach: #{vmdk_full_name}"
 
           if disk_attched_to_vm == true
-            puts "Trying to attach disk '#{vmdk_full_name}' but it is already attached to a VM. Exiting..."
-            exit(-1)
+            puts "Trying to attach disk '#{vmdk_full_name}' but it is already attached to a VM. Skipping..."
+            return
           end
 
           vmdk_backing = RbVmomi::VIM::VirtualDiskFlatVer2BackingInfo(
