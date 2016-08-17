@@ -18,6 +18,10 @@ module VagrantPlugins
           nil
         end
 
+        # Validates that the 'disks' attribute configuration is correct:
+        # 'create' and 'path' attributes are required
+        # If 'create' attribute is provided, 'size' and 'type' attributes
+        # are also required.
         def validate_config(disks)
           disks.each do |disk|
             create = disk['create']
@@ -48,6 +52,8 @@ module VagrantPlugins
           end
         end
 
+        # Checks whether the virtual disk specified by the
+        # path already exists in the datastore.
         def find_virtual_disk_in_datastore(datastore, path)
 
           split_path = path.split(/\//)
@@ -232,6 +238,7 @@ module VagrantPlugins
           return find_device(vm, use_controller)
         end
 
+        # Finds next available unit number in the provided SCSI controller
         def find_new_unit_number (scsi_tree, ctrl)
           used_unit_numbers = []
           scsi_tree.keys.sort.each do |c|
@@ -253,6 +260,8 @@ module VagrantPlugins
           return available_unit_numbers.sort[0]
         end
 
+        # Adds new virtual disk to the VM. If this disk is already attached
+        # to any other VM, the error is thrown and program exists with errno=-1
         def attach_virtual_disk_to_vm (vm, datastore, vmdk_full_name, vmdk_path, vmdk_size_kb, ctrl_key, unit_number)
           disk_attched_to_vm = is_disk_attached datastore, vmdk_path
 
@@ -289,6 +298,8 @@ module VagrantPlugins
           vm.ReconfigVM_Task(spec: vm_config_spec).wait_for_completion
         end
 
+        # Verifies that the folder specified by the path exists
+        # in the datastore. If it doesn't, it is created
         def verify_vmdir_exists (datastore, datacenter, path)
 
           split_path = path.split(/\//)
@@ -343,6 +354,7 @@ module VagrantPlugins
             vmdk_full_name = "[#{vmdk_datastore.name}] #{path}"
 
             if create_disk == true
+              # If create flag is true, we need to grab the provisioning type and size
               size = disk['size']
               vmdk_type = disk['type']
               vmdk_size_kb = size.to_i * 1024
@@ -366,7 +378,7 @@ module VagrantPlugins
             new_unit_number = find_new_unit_number scsi_tree, ctrl
 
             begin
-              attach_virtual_disk_to_vm vm, vmdk_datastore, vmdk_full_name, path, vmdk_size_kb, ctrl, new_unit_number
+              attach_virtual_disk_to_vm vm, vmdk_datastore, vmdk_full_name, path, vmdk_size_kb, ctrl.key, new_unit_number
             rescue RbVmomi::Fault => e
               puts "Error when attaching disk #{path}: #{e}."
 
