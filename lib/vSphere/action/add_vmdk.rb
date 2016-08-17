@@ -202,7 +202,7 @@ module VagrantPlugins
             if scsi_tree.keys.length < 4 # Virtual SCSI adapters per virtual machine
 
               # Add a controller if none are available
-              puts 'no controllers available. Will attempt to create'
+              puts 'No controllers available. Will attempt to create'
               new_scsi_key = scsi_tree.keys.sort[scsi_tree.length - 1] + 1
               new_scsi_bus_number = scsi_tree[scsi_tree.keys.sort[scsi_tree.length - 1]]['device'].busNumber + 1
 
@@ -223,7 +223,7 @@ module VagrantPlugins
 
               vm.ReconfigVM_Task(spec: vm_config_spec).wait_for_completion
             else
-              ui.info 'Controllers maxed out at 4.'
+              puts 'Controllers maxed out at 4.'
               exit(-1)
             end
           end
@@ -375,6 +375,12 @@ module VagrantPlugins
 
             scsi_tree = find_scsi_controller_tree vm
             ctrl = find_scsi_controller vm, scsi_tree
+
+            if ctrl.nil?
+              puts "Didn't find any SCSI controllers. Exiting..."
+              exit(-1)
+            end
+
             new_unit_number = find_new_unit_number scsi_tree, ctrl
 
             begin
