@@ -55,7 +55,6 @@ module VagrantPlugins
         # Checks whether the virtual disk specified by the
         # path already exists in the datastore.
         def find_virtual_disk_in_datastore(datastore, path)
-          puts "find 1"
 
           split_path = path.split(/\//)
 
@@ -118,8 +117,6 @@ module VagrantPlugins
             exit (-1)
           end
 
-          puts "find 2"
-
           # There should be only 1 file matching the search criteria
           return files[0]
         end
@@ -130,7 +127,6 @@ module VagrantPlugins
         # If it's attached to this VM, it function returns true and lets
         # the caller handle.
         def is_disk_attached (datastore, vmdk_path, my_vm)
-          puts "attached 1"
           pc = datastore._connection.serviceContent.propertyCollector
           vms = datastore.vm
 
@@ -163,8 +159,6 @@ module VagrantPlugins
 
         # Creates new virtual disk in the datastore
         def create_new_disk_in_datastore(datastore, vdm, path, vmdk_size_kb, vmdk_type, datacenter)
-          # TODO - thick, preallocated?
-          vmdk_type = 'preallocated' if vmdk_type == 'thick'
           vmdk_full_name = "[#{datastore.name}] #{path}"
 
           # create the disk
@@ -287,10 +281,8 @@ module VagrantPlugins
         def attach_virtual_disk_to_vm (vm, datastore, vmdk_full_name, vmdk_path, vmdk_size_kb, ctrl_key, unit_number)
           disk_attched_to_vm = is_disk_attached datastore, vmdk_path, vm
 
-          puts "Trying to attach: #{vmdk_full_name}"
-
           if disk_attched_to_vm == true
-            puts "Trying to attach disk '#{vmdk_full_name}' but it is already attached to this VM. Skipping..."
+            # Trying to attach disk but it is already attached to this VM. Skipping...
             return
           end
 
@@ -349,7 +341,11 @@ module VagrantPlugins
 
         def call(env)
           machine = env[:machine]
-          return if machine.state.id == :not_created
+
+          if machine.state.id == :not_created
+            puts 'VM is not created. Exiting...'
+            return
+          end
 
           config = machine.provider_config
           disks = config.disks
@@ -360,7 +356,10 @@ module VagrantPlugins
             vim = env[:vSphere_connection]
             vm = get_vm_by_uuid vim, machine
 
-            return if vm.nil?
+            if vm.nil?
+              puts 'Did not find the specified VM. Exiting...'
+              return
+            end
 
             datacenter = get_datacenter vim, machine
             vmdk_datastore = get_datastore datacenter, machine
@@ -370,8 +369,6 @@ module VagrantPlugins
               path = disk['path']
 
               verify_vmdir_exists vmdk_datastore, datacenter, path
-
-              puts "Choosing: #{vmdk_datastore.name}"
 
               virtualDisk = find_virtual_disk_in_datastore vmdk_datastore, path
               vmdk_full_name = "[#{vmdk_datastore.name}] #{path}"
