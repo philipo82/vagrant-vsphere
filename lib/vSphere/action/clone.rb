@@ -84,7 +84,7 @@ module VagrantPlugins
               env[:ui].info " -- Custom Disk size: #{disk_size_in_mb} MB" if disk_size_in_mb > 0
 
               new_vm = template.CloneVM_Task(folder: vm_base_folder, name: name, spec: spec).wait_for_completion
-              resize_disk(new_vm, disk_size_in_mb, env) if disk_size_in_mb > 0
+              resize_disk(new_vm, disk_size_in_mb) if disk_size_in_mb > 0
               new_vm.PowerOnVM_Task.wait_for_completion
 
               config.custom_attributes.each do |k, v|
@@ -108,7 +108,7 @@ module VagrantPlugins
 
         private
 
-        def resize_disk(machine, sizeInMB, env)
+        def resize_disk(machine, sizeInMB)
           # get current vm disk
           virtual_disk = machine.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)[0] || fail
           new_size_in_kb = sizeInMB * 1024
