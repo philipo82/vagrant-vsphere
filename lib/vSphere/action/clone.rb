@@ -30,6 +30,7 @@ module VagrantPlugins
 
             # Storage DRS does not support vSphere linked clones. http://www.vmware.com/files/pdf/techpaper/vsphere-storage-drs-interoperability.pdf
             ds = get_datastore dc, machine
+            
             fail Errors::VSphereError, :'invalid_configuration_linked_clone_with_sdrs' if config.linked_clone && ds.is_a?(RbVmomi::VIM::StoragePod)
 
             location = get_location ds, dc, machine, template
@@ -228,7 +229,7 @@ module VagrantPlugins
         end
         
         def add_custom_disk_size(template, spec, disk_size)
-	  spec[:config][:diskSizeGB] = Integer(disk_size)        
+          spec[:config][:diskSizeGB] = Integer(disk_size)        
         end
 
         def add_custom_mac(template, spec, mac)
