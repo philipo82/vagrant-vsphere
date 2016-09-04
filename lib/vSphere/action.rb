@@ -48,6 +48,10 @@ module VagrantPlugins
               b3.use SyncedFolders
             end
           end
+
+          b.use ConnectVSphere
+          b.use AddVMDK
+          b.use CloseVSphere
         end
       end
 
@@ -114,6 +118,10 @@ module VagrantPlugins
           b.use Provision
           b.use SyncedFolders
           b.use SetHostname
+
+          b.use ConnectVSphere
+          b.use AddVMDK
+          b.use CloseVSphere
         end
       end
 
@@ -191,6 +199,7 @@ module VagrantPlugins
       autoload :MessageNotRunning, action_root.join('message_not_running')
       autoload :PowerOff, action_root.join('power_off')
       autoload :PowerOn, action_root.join('power_on')
+      autoload :AddVMDK, action_root.join('add_vmdk')
     end
   end
 end
