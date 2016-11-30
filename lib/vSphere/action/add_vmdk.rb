@@ -161,6 +161,7 @@ module VagrantPlugins
         def create_new_disk_in_datastore(datastore, vdm, path, vmdk_size_kb, vmdk_type, datacenter)
           vmdk_full_name = "[#{datastore.name}] #{path}"
 
+
           # create the disk
           unless datastore.exists? path
             vmdk_spec = RbVmomi::VIM::FileBackedVirtualDiskSpec(
@@ -291,6 +292,7 @@ module VagrantPlugins
               diskMode: 'persistent',
               fileName: vmdk_full_name
           )
+          
 
           device = RbVmomi::VIM::VirtualDisk(
               backing: vmdk_backing,
@@ -299,14 +301,35 @@ module VagrantPlugins
               key: -1,
               unitNumber: unit_number
           )
-
+          
+          already_attached_disks = nil
+          
+          if !vm.config.nil? && !vm.config.extraConfig.nil?
+              vm.config.extraConfig.each do |extraOption|
+                  if extraOption.key == "AttachedDisks"
+                  	already_attached_disks = extraOption
+                  	break
+                  end
+              end
+          end
+          
+          if already_attached_disks.nil?
+              already_attached_disks = RbVmomi::VIM::OptionValue(
+                  key: "AttachedDisks",
+                  value: vmdk_backing.fileName
+              )
+          else
+              already_attached_disks.value = already_attached_disks.value + "," + vmdk_backing.fileName
+          end
+          
           device_config_spec = RbVmomi::VIM::VirtualDeviceConfigSpec(
               device: device,
               operation: RbVmomi::VIM::VirtualDeviceConfigSpecOperation('add')
           )
 
           vm_config_spec = RbVmomi::VIM::VirtualMachineConfigSpec(
-              deviceChange: [device_config_spec]
+              deviceChange: [device_config_spec],
+              extraConfig: [already_attached_disks]      
           )
 
           vm.ReconfigVM_Task(spec: vm_config_spec).wait_for_completion
@@ -355,7 +378,7 @@ module VagrantPlugins
 
             vim = env[:vSphere_connection]
             vm = get_vm_by_uuid vim, machine
-
+            
             if vm.nil?
               puts 'Did not find the specified VM. Exiting...'
               return
@@ -378,7 +401,7 @@ module VagrantPlugins
                 size = disk['size']
                 vmdk_type = disk['type']
                 vmdk_size_kb = size.to_i * 1024
-
+                
                 if !virtualDisk.nil?
                   puts "Virtual disk #{path} already created - using this one."
                 else
