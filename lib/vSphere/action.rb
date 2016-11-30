@@ -11,6 +11,7 @@ module VagrantPlugins
         Vagrant::Action::Builder.new.tap do |b|
           b.use ConfigValidate
           b.use ConnectVSphere
+          b.use RemoveVMDK
           b.use(ProvisionerCleanup, :before)
 
           b.use Call, IsRunning do |env, b2|
@@ -200,6 +201,7 @@ module VagrantPlugins
       autoload :PowerOff, action_root.join('power_off')
       autoload :PowerOn, action_root.join('power_on')
       autoload :AddVMDK, action_root.join('add_vmdk')
+      autoload :RemoveVMDK, action_root.join('remove_vmdk')
     end
   end
 end
