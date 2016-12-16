@@ -24,13 +24,12 @@ module VagrantPlugins
           fail Errors::VSphereError, :'invalid_base_path' if vm_base_folder.nil?
           disk_size_in_mb = config.disk_size.to_i
           fail Errors::VSphereError, :'Error grabbing disk_size' if disk_size_in_mb.nil?
-          fail Errors::VSphereError, :'ERROR disk_size greater than 1TB' if disk_size_in_mb > 1048576
-          begin
-            template_disk = template.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk).first
+          fail Errors::VSphereError, :'ERROR disk_size greater than 1TB' if disk_size_in_mb > 1_048_576
 
+          begin
             # Storage DRS does not support vSphere linked clones. http://www.vmware.com/files/pdf/techpaper/vsphere-storage-drs-interoperability.pdf
             ds = get_datastore dc, machine
-            
+
             fail Errors::VSphereError, :'invalid_configuration_linked_clone_with_sdrs' if config.linked_clone && ds.is_a?(RbVmomi::VIM::StoragePod)
 
             location = get_location ds, dc, machine, template
@@ -227,9 +226,9 @@ module VagrantPlugins
           card_spec = { :deviceChange => [{ :operation => :edit, :device => card }] }
           template.ReconfigVM_Task(:spec => card_spec).wait_for_completion
         end
-        
-        def add_custom_disk_size(template, spec, disk_size)
-          spec[:config][:diskSizeGB] = Integer(disk_size)        
+
+        def add_custom_disk_size(_template, spec, disk_size)
+          spec[:config][:diskSizeGB] = Integer(disk_size)
         end
 
         def add_custom_mac(template, spec, mac)

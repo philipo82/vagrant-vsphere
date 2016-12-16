@@ -55,7 +55,6 @@ module VagrantPlugins
         # Checks whether the virtual disk specified by the
         # path already exists in the datastore.
         def find_virtual_disk_in_datastore(datastore, path)
-
           split_path = path.split(/\//)
 
           if split_path.empty? || split_path.length < 2
@@ -67,58 +66,55 @@ module VagrantPlugins
           split_path.delete_at(split_path.length - 1)
           vmdk_folder = split_path.join("/")
 
-          searchDetails = RbVmomi::VIM::FileQueryFlags(
-              fileOwner: true,
-              fileSize: true,
-              fileType: true,
-              modification: true)
-
-          fileQueryDetails = RbVmomi::VIM::VmDiskFileQueryFlags(
-              capacityKb: true,
-              controllerType: false,
-              diskExtents: true,
-              diskType: true,
-              hardwareVersion: false,
-              thin: true
+          search_details = RbVmomi::VIM::FileQueryFlags(
+            fileOwner: true,
+            fileSize: true,
+            fileType: true,
+            modification: true
           )
 
-          fileQuery = RbVmomi::VIM::VmDiskFileQuery(
-              details: fileQueryDetails
+          file_query_details = RbVmomi::VIM::VmDiskFileQueryFlags(
+            capacityKb: true,
+            controllerType: false,
+            diskExtents: true,
+            diskType: true,
+            hardwareVersion: false,
+            thin: true
           )
 
-          searchSpecObj = RbVmomi::VIM::HostDatastoreBrowserSearchSpec(
-              details: searchDetails,
-              query: [fileQuery],
-              matchPattern: ["#{vmdk_file_name}"]
+          file_query = RbVmomi::VIM::VmDiskFileQuery(
+            details: file_query_details
           )
 
-          existingDataStorePath = "[#{datastore.name}] #{vmdk_folder}"
+          search_spec_obj = RbVmomi::VIM::HostDatastoreBrowserSearchSpec(
+            details: search_details,
+            query: [file_query],
+            matchPattern: ["#{vmdk_file_name}"]
+          )
+
+          existing_datastore_path = "[#{datastore.name}] #{vmdk_folder}"
 
           search_task = datastore.browser.SearchDatastoreSubFolders_Task(
-              datastorePath: existingDataStorePath,
-              searchSpec: searchSpecObj
+            datastorePath: existing_datastore_path,
+            searchSpec: search_spec_obj
           )
 
           search_task.wait_for_completion
           search_result = search_task.info.result
 
-          if search_result.empty?
-            return nil
-          end
+          return nil if search_result.empty?
 
           files = search_result[0].file
 
-          if files.empty?
-            return nil
-          end
+          return nil if files.empty?
 
           if files.length > 1
             puts "Found more than 1 virtual disks with a given path #{path}. This should not have happened. Exiting..."
-            exit (-1)
+            exit(-1)
           end
 
           # There should be only 1 file matching the search criteria
-          return files[0]
+          files[0]
         end
 
         # Checks whether the virtual disk specified by the datastore and path
@@ -126,7 +122,7 @@ module VagrantPlugins
         # the program displays an error and exits with -1 error code.
         # If it's attached to this VM, it function returns true and lets
         # the caller handle.
-        def is_disk_attached (datastore, vmdk_path, my_vm)
+        def disk_attached?(datastore, vmdk_path, my_vm)
           pc = datastore._connection.serviceContent.propertyCollector
           vms = datastore.vm
 
@@ -138,47 +134,46 @@ module VagrantPlugins
 
             vm_files.keys.each do |vmFile|
               vm_files[vmFile]['layoutEx.file'].each do |layout|
-                if layout.name.match(/^\[#{datastore.name}\] #{vmdk_path}/)
-                  if vm == my_vm
-                    attached_to_my_vm = true
-                  else
-                    other_vm_name = vm.config.name
-                  end
+                next unless layout.name.match(/^\[#{datastore.name}\] #{vmdk_path}/)
+
+                if vm == my_vm
+                  attached_to_my_vm = true
+                else
+                  other_vm_name = vm.config.name
                 end
               end
             end
           end
 
-          if !other_vm_name.nil?
+          unless other_vm_name.nil?
             puts "The virtual disk #{vmdk_path} is already attached to VM #{other_vm_name}. Exiting..."
-            exit (-1)
+            exit(-1)
           end
 
-          return attached_to_my_vm
+          attached_to_my_vm
         end
 
         # Creates new virtual disk in the datastore
         def create_new_disk_in_datastore(datastore, vdm, path, vmdk_size_kb, vmdk_type, datacenter)
           vmdk_full_name = "[#{datastore.name}] #{path}"
 
+          # create the disk if the file doesn't exist
+          return if datastore.exists? path
 
-          # create the disk
-          unless datastore.exists? path
-            vmdk_spec = RbVmomi::VIM::FileBackedVirtualDiskSpec(
-                adapterType: 'lsiLogic',
-                capacityKb: vmdk_size_kb,
-                diskType: vmdk_type
-            )
+          vmdk_spec = RbVmomi::VIM::FileBackedVirtualDiskSpec(
+            adapterType: 'lsiLogic',
+            capacityKb: vmdk_size_kb,
+            diskType: vmdk_type
+          )
 
-            vdm.CreateVirtualDisk_Task(
-                datacenter: datacenter,
-                name: vmdk_full_name,
-                spec: vmdk_spec
-            ).wait_for_completion
-          end
+          vdm.CreateVirtualDisk_Task(
+            datacenter: datacenter,
+            name: vmdk_full_name,
+            spec: vmdk_spec
+          ).wait_for_completion
         end
 
-        def find_scsi_controller_tree (vm)
+        def find_scsi_controller_tree(vm)
           scsi_tree = {}
 
           vm.config.hardware.device.each do |device|
@@ -197,12 +192,12 @@ module VagrantPlugins
             scsi_tree[device.controllerKey]['children'].push(device)
           end
 
-          return scsi_tree
+          scsi_tree
         end
 
         # Finds available SCSI controller. If it doesn't find any controllers
         # it creates one first.
-        def find_scsi_controller (vm, scsi_tree)
+        def find_scsi_controller(vm, scsi_tree)
           # now we run through the SCSI controllers to see if there's an available one
           available_controllers = []
           use_controller = nil
@@ -252,11 +247,11 @@ module VagrantPlugins
             end
           end
 
-          return find_device(vm, use_controller)
+          find_device(vm, use_controller)
         end
 
         # Finds next available unit number in the provided SCSI controller
-        def find_new_unit_number (scsi_tree, ctrl)
+        def find_new_unit_number(scsi_tree, ctrl)
           used_unit_numbers = []
           scsi_tree.keys.sort.each do |c|
             next unless ctrl.key == scsi_tree[c]['device'].key
@@ -274,13 +269,13 @@ module VagrantPlugins
             end
           end
 
-          return available_unit_numbers.sort[0]
+          available_unit_numbers.sort[0]
         end
 
         # Adds new virtual disk to the VM. If this disk is already attached
         # to any other VM, the error is thrown and program exists with errno=-1
-        def attach_virtual_disk_to_vm (vm, datastore, vmdk_full_name, vmdk_path, vmdk_size_kb, ctrl_key, unit_number)
-          disk_attched_to_vm = is_disk_attached datastore, vmdk_path, vm
+        def attach_virtual_disk_to_vm(vm, datastore, vmdk_full_name, vmdk_path, vmdk_size_kb, ctrl_key, unit_number)
+          disk_attched_to_vm = disk_attached? datastore, vmdk_path, vm
 
           if disk_attched_to_vm == true
             # Trying to attach disk but it is already attached to this VM. Skipping...
@@ -292,7 +287,6 @@ module VagrantPlugins
               diskMode: 'persistent',
               fileName: vmdk_full_name
           )
-          
 
           device = RbVmomi::VIM::VirtualDisk(
               backing: vmdk_backing,
@@ -301,27 +295,27 @@ module VagrantPlugins
               key: -1,
               unitNumber: unit_number
           )
-          
+
           already_attached_disks = nil
-          
+
           if !vm.config.nil? && !vm.config.extraConfig.nil?
-              vm.config.extraConfig.each do |extraOption|
-                  if extraOption.key == "AttachedDisks"
-                  	already_attached_disks = extraOption
-                  	break
-                  end
+            vm.config.extraConfig.each do |extraOption|
+              if extraOption.key == "AttachedDisks"
+                already_attached_disks = extraOption
+                break
               end
+            end
           end
-          
+
           if already_attached_disks.nil?
-              already_attached_disks = RbVmomi::VIM::OptionValue(
-                  key: "AttachedDisks",
-                  value: vmdk_backing.fileName
-              )
+            already_attached_disks = RbVmomi::VIM::OptionValue(
+              key: "AttachedDisks",
+              value: vmdk_backing.fileName
+            )
           else
-              already_attached_disks.value = already_attached_disks.value + "," + vmdk_backing.fileName
+            already_attached_disks.value = already_attached_disks.value + "," + vmdk_backing.fileName
           end
-          
+
           device_config_spec = RbVmomi::VIM::VirtualDeviceConfigSpec(
               device: device,
               operation: RbVmomi::VIM::VirtualDeviceConfigSpecOperation('add')
@@ -329,7 +323,7 @@ module VagrantPlugins
 
           vm_config_spec = RbVmomi::VIM::VirtualMachineConfigSpec(
               deviceChange: [device_config_spec],
-              extraConfig: [already_attached_disks]      
+              extraConfig: [already_attached_disks]
           )
 
           vm.ReconfigVM_Task(spec: vm_config_spec).wait_for_completion
@@ -337,8 +331,7 @@ module VagrantPlugins
 
         # Verifies that the folder specified by the path exists
         # in the datastore. If it doesn't, it is created
-        def verify_vmdir_exists (datastore, datacenter, path)
-
+        def verify_vmdir_exists(datastore, datacenter, path)
           split_path = path.split(/\//)
 
           if split_path.empty? || split_path.length < 2
@@ -349,16 +342,15 @@ module VagrantPlugins
           split_path.delete_at(split_path.length - 1)
           vmdk_folder = split_path.join("/")
 
-          unless datastore.exists? vmdk_folder
-            dc = datacenter
-            vmdk_dir = "[#{datastore.name}] #{vmdk_folder}"
-            begin
-              dc._connection.serviceContent.fileManager.MakeDirectory name: vmdk_dir, datacenter: dc, createParentDirectories: true
-            rescue RbVmomi::Fault => e
-              puts "Error when creating directory #{vmdk_dir}."
+          return if datastore.exists? vmdk_folder
 
-              exit (-1)
-            end
+          dc = datacenter
+          vmdk_dir = "[#{datastore.name}] #{vmdk_folder}"
+          begin
+            dc._connection.serviceContent.fileManager.MakeDirectory name: vmdk_dir, datacenter: dc, createParentDirectories: true
+          rescue RbVmomi::Fault
+            puts "Error when creating directory #{vmdk_dir}."
+            exit(-1)
           end
         end
 
@@ -373,70 +365,70 @@ module VagrantPlugins
           config = machine.provider_config
           disks = config.disks
 
-          if !disks.nil?
-            validate_config disks
+          return if disks.nil?
 
-            vim = env[:vSphere_connection]
-            vm = get_vm_by_uuid vim, machine
-            
-            if vm.nil?
-              puts 'Did not find the specified VM. Exiting...'
-              return
-            end
+          validate_config disks
 
-            datacenter = get_datacenter vim, machine
-            vmdk_datastore = get_datastore datacenter, machine
+          vim = env[:vSphere_connection]
+          vm = get_vm_by_uuid vim, machine
 
-            disks.each do |disk|
-              create_disk = disk['create']
-              path = disk['path']
+          if vm.nil?
+            puts 'Did not find the specified VM. Exiting...'
+            return
+          end
 
-              verify_vmdir_exists vmdk_datastore, datacenter, path
+          datacenter = get_datacenter vim, machine
+          vmdk_datastore = get_datastore datacenter, machine
 
-              virtualDisk = find_virtual_disk_in_datastore vmdk_datastore, path
-              vmdk_full_name = "[#{vmdk_datastore.name}] #{path}"
+          disks.each do |disk|
+            create_disk = disk['create']
+            path = disk['path']
 
-              if create_disk == true
-                # If create flag is true, we need to grab the provisioning type and size
-                size = disk['size']
-                vmdk_type = disk['type']
-                vmdk_size_kb = size.to_i * 1024
-                
-                if !virtualDisk.nil?
-                  puts "Virtual disk #{path} already created - using this one."
-                else
-                  create_new_disk_in_datastore vmdk_datastore, vim.serviceContent.virtualDiskManager, path, vmdk_size_kb, vmdk_type, datacenter
-                end
+            verify_vmdir_exists vmdk_datastore, datacenter, path
+
+            virtual_disk = find_virtual_disk_in_datastore vmdk_datastore, path
+            vmdk_full_name = "[#{vmdk_datastore.name}] #{path}"
+
+            if create_disk == true
+              # If create flag is true, we need to grab the provisioning type and size
+              size = disk['size']
+              vmdk_type = disk['type']
+              vmdk_size_kb = size.to_i * 1024
+
+              if !virtual_disk.nil?
+                puts "Virtual disk #{path} already created - using this one."
               else
-                if virtualDisk.nil?
-                  puts "Couldn't find virtual disk specified at #{path} in datastore [#{vmdk_datastore.name}]. Exiting..."
-                  exit (-1)
-                end
-
-                vmdk_size_kb = virtualDisk.capacityKb
+                create_new_disk_in_datastore vmdk_datastore, vim.serviceContent.virtualDiskManager, path, vmdk_size_kb, vmdk_type, datacenter
               end
-
-              scsi_tree = find_scsi_controller_tree vm
-              ctrl = find_scsi_controller vm, scsi_tree
-
-              if ctrl.nil?
-                puts "Didn't find any SCSI controllers. Exiting..."
+            else
+              if virtual_disk.nil?
+                puts "Couldn't find virtual disk specified at #{path} in datastore [#{vmdk_datastore.name}]. Exiting..."
                 exit(-1)
               end
 
-              new_unit_number = find_new_unit_number scsi_tree, ctrl
-
-              begin
-                attach_virtual_disk_to_vm vm, vmdk_datastore, vmdk_full_name, path, vmdk_size_kb, ctrl.key, new_unit_number
-              rescue RbVmomi::Fault => e
-                puts "Error when attaching disk #{path}: #{e}."
-
-                exit (-1)
-              end
+              vmdk_size_kb = virtual_disk.capacityKb
             end
 
-            @app.call env
+            scsi_tree = find_scsi_controller_tree vm
+            ctrl = find_scsi_controller vm, scsi_tree
+
+            if ctrl.nil?
+              puts "Didn't find any SCSI controllers. Exiting..."
+              exit(-1)
+            end
+
+            new_unit_number = find_new_unit_number scsi_tree, ctrl
+
+            begin
+              attach_virtual_disk_to_vm vm, vmdk_datastore, vmdk_full_name, path, vmdk_size_kb, ctrl.key, new_unit_number
+            rescue RbVmomi::Fault => e
+              puts "Error when attaching disk #{path}: #{e}."
+
+              exit(-1)
+            end
           end
+
+          @app.call env
         end
       end
     end
