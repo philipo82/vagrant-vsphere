@@ -11,7 +11,6 @@ module VagrantPlugins
         Vagrant::Action::Builder.new.tap do |b|
           b.use ConfigValidate
           b.use ConnectVSphere
-          b.use RemoveVMDK
           b.use(ProvisionerCleanup, :before)
 
           b.use Call, IsRunning do |env, b2|
@@ -26,6 +25,8 @@ module VagrantPlugins
               end
             end
           end
+
+          b.use RemoveVMDK
           b.use Destroy
         end
       end

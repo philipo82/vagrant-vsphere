@@ -55,6 +55,7 @@ RSpec.configure do |config|
         linked_clone: nil,
         proxy_host: nil,
         proxy_port: nil,
+        disks: nil,
         disk_size: nil,
         vlan: nil,
         memory_mb: nil,
@@ -97,6 +98,7 @@ RSpec.configure do |config|
     }
 
     @vm = double('vm',
+                 config: nil,
                  runtime: double('runtime', powerState: nil),
                  guest: double('guest', ipAddress: IP_ADDRESS),
                  Destroy_Task: double('result', wait_for_completion: nil),
