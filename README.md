@@ -130,6 +130,7 @@ This provider has the following settings, all are required unless noted:
 * `vlan` - _Optional_ vlan to connect the first NIC to
 * `memory_mb` - _Optional_ Configure the amount of memory (in MB) for the new VM
 * `cpu_count` - _Optional_ Configure the number of CPUs for the new VM
+* `disk_size` - _Optional_ size of vm disk in GB
 * `mac` - _Optional_ Used to set the mac address of the new VM
 * `cpu_reservation` - _Optional_ Configure the CPU time (in MHz) to reserve for this VM
 * `mem_reservation` - _Optional_ Configure the memory (in MB) to reserve for this VM
@@ -148,7 +149,7 @@ This provider has the following settings, all are required unless noted:
 * `real_nic_ip` - _Optional_ true/false - Enable logic that forces the acquisition of the ssh IP address
   for a target VM to be retrieved from the list of vm adapters on the host and filtered for a single legitimate
   adapter with a defined interface.   An error will be raised if this filter is enabled and multiple valid
-  adapters exist on a host. 
+  adapters exist on a host.
 
 ### Cloning from a VM rather than a template
 

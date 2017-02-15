@@ -55,6 +55,8 @@ RSpec.configure do |config|
         linked_clone: nil,
         proxy_host: nil,
         proxy_port: nil,
+        disks: nil,
+        disk_size: nil,
         vlan: nil,
         memory_mb: nil,
         cpu_count: nil,
@@ -96,6 +98,7 @@ RSpec.configure do |config|
     }
 
     @vm = double('vm',
+                 config: nil,
                  runtime: double('runtime', powerState: nil),
                  guest: double('guest', ipAddress: IP_ADDRESS),
                  Destroy_Task: double('result', wait_for_completion: nil),
@@ -133,7 +136,9 @@ RSpec.configure do |config|
                        parent: @data_center,
                        pretty_path: "#{@data_center.pretty_path}/template_vm",
                        CloneVM_Task: double('result',
-                                            wait_for_completion: double('new_vm', config: double('config', uuid: NEW_UUID))),
+                                            wait_for_completion: double('new_vm',
+                                                                        :PowerOnVM_Task => double('result', :wait_for_completion => nil),
+                                                                        :config => double('config', :uuid => NEW_UUID))),
                        config: @template_config)
 
     @data_center.stub(:find_vm).with(TEMPLATE).and_return(@template)

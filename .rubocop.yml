@@ -30,5 +30,8 @@ Metrics/MethodLength:
 Metrics/ModuleLength:
   Enabled: false
 
+Metrics/ParameterLists:
+  Enabled: false
+
 Metrics/PerceivedComplexity:
   Enabled: false

@@ -26,6 +26,8 @@ module VagrantPlugins
       attr_accessor :cpu_count
       attr_accessor :cpu_reservation
       attr_accessor :mem_reservation
+      attr_accessor :disk_size
+      attr_accessor :disks
       attr_accessor :extra_config
       attr_accessor :real_nic_ip
       attr_accessor :notes

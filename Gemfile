@@ -8,6 +8,7 @@ group :development do
   # Vagrant environment itself using `vagrant plugin`.
 
   ruby '2.0.0'
+  gem 'rake', '< 11.0'
   gem 'vagrant', git: 'git://github.com/mitchellh/vagrant.git', tag: 'v1.8.1'
 end
 
